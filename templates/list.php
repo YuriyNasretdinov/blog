@@ -27,6 +27,10 @@
         margin-bottom: 20px;
     }
 
+    .content-textarea {
+        height: 100px;
+    }
+
 </style>
 
 <h1>Entries in my blog</h1>
@@ -71,7 +75,7 @@
     <label>Header</label>
     <input name="header" type="text" />
     <label>Content</label>
-    <textarea name="content"></textarea>
+    <textarea name="content" class="content-textarea"></textarea>
     <div style="padding-top: 10px;">
         <button type="submit" class="btn">
             Post

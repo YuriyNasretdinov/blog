@@ -12,6 +12,7 @@ define('IS_ADMIN', isset($_SESSION['IS_ADMIN']));
 switch ($act) {
     case 'list':
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+        $max_length = 100;
         $limit = 1;
         $offset = ($page - 1) * $limit;
         $records = array();
@@ -25,8 +26,8 @@ switch ($act) {
             LIMIT $offset, $limit");
         while ($row = $sel->fetch_assoc()) {
             $row['date'] = date('Y-m-d H:i:s', $row['date']);
-            if (mb_strlen($row['content']) > 60) {
-                $row['content'] = mb_substr(strip_tags($row['content']), 0, 57) . '...';
+            if (mb_strlen($row['content']) > $max_length) {
+                $row['content'] = mb_substr(strip_tags($row['content']), 0, $max_length - 3) . '...';
             }
             $row['content'] = nl2br($row['content']);
             $row['header'] = htmlspecialchars($row['header']);
