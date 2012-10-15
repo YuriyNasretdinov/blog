@@ -12,11 +12,11 @@ define('IS_ADMIN', isset($_SESSION['IS_ADMIN']));
 switch ($act) {
     case 'list':
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-        $limit = 1;
+        $limit = 2;
         $offset = ($page - 1) * $limit;
         $records = array();
         $pages_result = $mysqli->query("SELECT COUNT(*) AS cnt FROM entry")->fetch_assoc();
-        $pages = $pages_result['cnt'];
+        $pages = ceil($pages_result['cnt'] / $limit);
         $sel = $mysqli->query("SELECT entry.*, COUNT(comment.id) AS comments
             FROM entry
             LEFT JOIN comment ON entry.id = comment.entry_id
