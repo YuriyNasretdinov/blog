@@ -1,9 +1,6 @@
 <?php
 session_start();
 header('Content-type: text/html; charset=UTF-8');
-$mysqli = new mysqli('localhost', 'blog', 'blog') or die('Cannot connect to database');
-$mysqli->select_db('blog') or die('Cannot select database');
-$mysqli->set_charset('utf8');
 mb_internal_encoding('UTF-8');
 $act = isset($_GET['act']) ? $_GET['act'] : 'list';
 
@@ -13,26 +10,20 @@ switch ($act) {
     case 'list':
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $max_length = 100;
-        $limit = 2;
-        $offset = ($page - 1) * $limit;
-        $records = array();
-        $pages_result = $mysqli->query("SELECT COUNT(*) AS cnt FROM entry")->fetch_assoc();
-        $pages = ceil($pages_result['cnt'] / $limit);
-        $sel = $mysqli->query("SELECT entry.*, COUNT(comment.id) AS comments
-            FROM entry
-            LEFT JOIN comment ON entry.id = comment.entry_id
-            GROUP BY entry.id
-            ORDER BY date DESC
-            LIMIT $offset, $limit");
-        while ($row = $sel->fetch_assoc()) {
+        require_once(__DIR__ . "/model/Entry.php");
+        $Entry = new Entry(2);
+        $pages = $Entry->getPagesCount();
+        $records = $Entry->getEntries($page);
+
+        foreach ($records as &$row) {
             $row['date'] = date('Y-m-d H:i:s', $row['date']);
             if (mb_strlen($row['content']) > $max_length) {
                 $row['content'] = mb_substr(strip_tags($row['content']), 0, $max_length - 3) . '...';
             }
             $row['content'] = nl2br($row['content']);
             $row['header'] = htmlspecialchars($row['header']);
-            $records[] = $row;
         }
+        unset($row);
 
         require('templates/list.php');
         break;
@@ -40,31 +31,33 @@ switch ($act) {
         if (!isset($_GET['id'])) die("Missing id parameter");
         $id = intval($_GET['id']);
 
-        $ENTRY = $mysqli->query("SELECT * FROM entry WHERE id = $id")->fetch_assoc();
+        require_once(__DIR__ . "/model/Entry.php");
+        require_once(__DIR__ . "/model/Comment.php");
+        $entry_model = new Entry();
+        $comment_model = new Comment();
+
+        $ENTRY = $entry_model->getEntry($id);
         if (!$ENTRY) die("No such entry");
 
         $ENTRY['date'] = date('Y-m-d H:i:s', $ENTRY['date']);
         $ENTRY['content'] = nl2br($ENTRY['content']);
         $ENTRY['header'] = htmlspecialchars($ENTRY['header']);
 
-        $comments = array();
-        $sel = $mysqli->query("SELECT * FROM comment WHERE entry_id = $id ORDER BY date");
-        while ($row = $sel->fetch_assoc()) {
+        $comments = $comment_model->getCommentsForEntry($id);
+        foreach ($comments as &$row) {
             $row['date'] = date('Y-m-d H:i:s', $row['date']);
             $row['content'] = nl2br(htmlspecialchars($row['content']));
-            $row['header'] = htmlspecialchars($row['header']);
             $row['author'] = htmlspecialchars($row['author']);
-            $comments[] = $row;
         }
+        unset($row);
 
         require('templates/entry.php');
         break;
     case 'do-new-entry':
         if (!IS_ADMIN) die("You must be admin to add entry");
-        $sel = $mysqli->prepare("INSERT INTO entry(author, date, header, content) VALUES(?, ?, ?, ?)");
-        $time = time();
-        $sel->bind_param('siss', $_POST['author'], $time, $_POST['header'], $_POST['content']);
-        if ($sel->execute()) {
+        require_once(__DIR__ . "/model/Entry.php");
+        $Entry = new Entry();
+        if ($Entry->add($_POST['author'], $_POST['header'], $_POST['content'])) {
             header('Location: .');
         } else {
             die("Cannot insert entry");
@@ -72,40 +65,40 @@ switch ($act) {
         break;
     case 'delete-entry':
         if (!IS_ADMIN) die("You must be admin to delete entry");
-        $id = intval($_GET['id']);
-        $mysqli->query("DELETE FROM entry WHERE id = $id") or die("Cannot delete entry");
-        $mysqli->query("DELETE FROM comment WHERE entry_id = $id") or die("Cannot delete comment");
+        require_once(__DIR__ . "/model/Entry.php");
+        $Entry = new Entry();
+        $Entry->remove($_GET['id']) or die("Cannot delete entry");
         header('Location: .');
         break;
     case 'delete-comment':
         if (!IS_ADMIN) die("You must be admin to delete entry");
-        $id = intval($_GET['id']);
-        $mysqli->query("DELETE FROM comment WHERE id = $id") or die("Cannot delete comment");
+        require_once(__DIR__ . "/model/Comment.php");
+        $Comment = new Comment();
+        $Comment->remove($_GET['id']) or die("Cannot delete comment");
         header('Location: ?act=view-entry&id=' . intval($_GET['entry_id']));
         break;
     case 'edit-entry':
         if (!IS_ADMIN) die("You must be admin to edit entry");
         $id = intval($_GET['id']);
-        $row = $mysqli->query("SELECT * FROM entry WHERE id = $id")->fetch_assoc();
-        $row = array_map('htmlspecialchars', $row);
+        require_once(__DIR__ . "/model/Entry.php");
+        $Entry = new Entry();
+        $row = array_map('htmlspecialchars', $Entry->getEntry($id));
         require('templates/edit-entry.php');
         break;
     case 'apply-edit-entry':
         if (!IS_ADMIN) die("You must be admin to edit entry");
-        $sel = $mysqli->prepare("UPDATE entry SET author = ?, header = ?, content = ? WHERE id = ?");
-        $id = intval($_POST['id']);
-        $sel->bind_param('sssi', $_POST['author'], $_POST['header'], $_POST['content'], $id);
-        if ($sel->execute()) {
+        require_once(__DIR__ . "/model/Entry.php");
+        $Entry = new Entry();
+        if ($Entry->update($_POST['id'], $_POST['author'], $_POST['header'], $_POST['content'])) {
             header('Location: .');
         } else {
             die("Cannot insert entry");
         }
         break;
     case 'do-new-comment':
-        $sel = $mysqli->prepare("INSERT INTO comment(entry_id, author, date, content) VALUES(?, ?, ?, ?)");
-        $time = time();
-        $sel->bind_param('isis', $_POST['entry_id'], $_POST['author'], $time, $_POST['content']);
-        if ($sel->execute()) {
+        require_once(__DIR__ . "/model/Comment.php");
+        $Comment = new Comment();
+        if ($Comment->add($_POST['entry_id'], $_POST['author'], $_POST['content'])) {
             header('Location: ?act=view-entry&id=' . intval($_POST['entry_id']));
         } else {
             die("Cannot insert entry");
